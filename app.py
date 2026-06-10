@@ -104,16 +104,22 @@ def api_summary():
 def api_yield_trend():
     line = request.args.get('line')
     product = request.args.get('product')
+    worker = request.args.get('worker')
     granularity = request.args.get('granularity', 'day')
+    sigma = request.args.get('sigma', 3.0, type=float)
+    sigma = max(0.5, min(sigma, 10.0))
     
-    trend_data = get_yield_trend(line=line, product=product, granularity=granularity)
+    trend_data = get_yield_trend(line=line, product=product, worker=worker,
+                                granularity=granularity, sigma_threshold=sigma)
     trend_list = trend_data.to_dict('records')
     
-    chart = plot_yield_trend(trend_list, title='良率趋势图')
+    chart_title = f'良率趋势图 ({sigma}σ)'
+    chart = plot_yield_trend(trend_list, title=chart_title)
     
     return jsonify({
         'data': trend_list,
         'chart': chart,
+        'sigma': sigma,
     })
 
 
@@ -286,15 +292,15 @@ def api_custom_factor():
         return jsonify({'error': '无效的因子或数据不足'}), 400
     
     chart = None
-    if result['因子类型'] == '分类变量':
-        chart = plot_yield_bar(result['数据'], list(result['data'][0].keys())[0],
-                              title=f'{result["因子"]}良率对比')
-    elif result['因子类型'] == '连续变量':
-        x_data = [d['因子值'] for d in result['散点数据']]
-        y_data = [d['良率(%)'] for d in result['散点数据']]
+    if result['factor_type'] == 'categorical':
+        chart = plot_yield_bar(result['data'], result['category_col'],
+                              title=f'{result["factor"]}良率对比')
+    elif result['factor_type'] == 'continuous':
+        x_data = [d['因子值'] for d in result['scatter_data']]
+        y_data = [d['良率(%)'] for d in result['scatter_data']]
         if len(x_data) > 1:
-            chart = plot_factor_scatter(x_data, y_data, result['因子'], '良率 (%)',
-                                       title=f'{result["因子"]}-良率散点图')
+            chart = plot_factor_scatter(x_data, y_data, result['factor'], '良率 (%)',
+                                       title=f'{result["factor"]}-良率散点图')
     
     return jsonify({
         **result,

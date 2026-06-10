@@ -126,14 +126,27 @@ def process_yield_chain(product=None):
         overall_yield = (prod_filter['合格数量'].sum() / prod_filter['实际完成数量'].sum() * 100
                         if prod_filter['实际完成数量'].sum() > 0 else 0)
         
+        base_total = 1.0
+        for proc in processes:
+            base_total *= proc['基准良率']
+        
+        base_total_pct = base_total * 100
+        if base_total_pct > 0:
+            correction_factor = (overall_yield / base_total_pct) ** (1.0 / len(processes))
+        else:
+            correction_factor = 1.0
+        
         process_results = []
         cumulative_yield = 1.0
         
         for proc in processes:
             base_yield = proc['基准良率']
             
-            process_variation = np.random.uniform(-0.015, 0.01)
-            actual_yield = base_yield + process_variation
+            process_name = proc['工序']
+            name_hash = sum(ord(c) for c in process_name)
+            deterministic_offset = ((name_hash % 100) - 50) / 5000.0
+            
+            actual_yield = base_yield * correction_factor + deterministic_offset
             actual_yield = max(0.9, min(0.999, actual_yield))
             
             cumulative_yield *= actual_yield

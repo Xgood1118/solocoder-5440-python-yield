@@ -33,6 +33,17 @@
                 <option value="month">月</option>
             </select>
         </div>
+        <div class="filter-group">
+            <label>σ 倍数:</label>
+            <select id="filter-sigma">
+                <option value="1">1σ (68%)</option>
+                <option value="2">2σ (95%)</option>
+                <option value="2.5">2.5σ (99%)</option>
+                <option value="3" selected>3σ (99.73%)</option>
+                <option value="4">4σ (99.99%)</option>
+                <option value="5">5σ (99.9999%)</option>
+            </select>
+        </div>
         <button class="btn btn-primary" onclick="loadTrend()">查询</button>
     </div>
     
@@ -49,7 +60,7 @@
             <div class="chart-container" id="trend-chart">
                 <p class="placeholder">请选择筛选条件后点击查询</p>
             </div>
-            <div class="chart-legend">
+            <div class="chart-legend" id="trend-legend">
                 <span class="legend-item"><span class="legend-dot legend-blue"></span> 良率</span>
                 <span class="legend-item"><span class="legend-dot legend-red"></span> 控制限 (±3σ)</span>
                 <span class="legend-item"><span class="legend-dot legend-green"></span> 均值</span>
@@ -149,8 +160,9 @@ function loadTrend() {
     const line = document.getElementById('filter-line').value;
     const product = document.getElementById('filter-product').value;
     const granularity = document.getElementById('filter-granularity').value;
+    const sigma = document.getElementById('filter-sigma').value;
     
-    let url = '/api/yield/trend?granularity=' + granularity;
+    let url = '/api/yield/trend?granularity=' + granularity + '&sigma=' + sigma;
     if (line) url += '&line=' + encodeURIComponent(line);
     if (product) url += '&product=' + encodeURIComponent(product);
     
@@ -159,6 +171,14 @@ function loadTrend() {
         .then(data => {
             const chartDiv = document.getElementById('trend-chart');
             chartDiv.innerHTML = `<img src="data:image/png;base64,${data.chart}" class="chart-img" alt="良率趋势图">`;
+            
+            const sigma = data.sigma || 3;
+            const legendDiv = document.getElementById('trend-legend');
+            legendDiv.innerHTML = `
+                <span class="legend-item"><span class="legend-dot legend-blue"></span> 良率</span>
+                <span class="legend-item"><span class="legend-dot legend-red"></span> 控制限 (±${sigma}σ)</span>
+                <span class="legend-item"><span class="legend-dot legend-green"></span> 均值</span>
+            `;
             
             const anomalies = data.data.filter(d => d.异常标记);
             const anomalyTable = document.getElementById('anomaly-table');
@@ -283,8 +303,9 @@ function loadCombination() {
 function loadWorkerTrend() {
     const worker = document.getElementById('filter-worker').value;
     const granularity = document.getElementById('filter-granularity').value;
+    const sigma = document.getElementById('filter-sigma').value;
     
-    fetch(`/api/yield/trend?granularity=${granularity}&worker=${encodeURIComponent(worker)}`)
+    fetch(`/api/yield/trend?granularity=${granularity}&sigma=${sigma}&worker=${encodeURIComponent(worker)}`)
         .then(r => r.json())
         .then(data => {
             const chartDiv = document.getElementById('worker-trend-chart');

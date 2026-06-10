@@ -49,9 +49,16 @@ def calculate_yield(df, group_cols=None, filter_conditions=None):
     return grouped
 
 
-def calculate_yield_by_time(df, granularity='day', group_cols=None):
+def calculate_yield_by_time(df, granularity='day', group_cols=None, filter_conditions=None):
     data = df.copy()
     data['生产时间'] = pd.to_datetime(data['生产时间'])
+    
+    if filter_conditions:
+        for col, value in filter_conditions.items():
+            if isinstance(value, list):
+                data = data[data[col].isin(value)]
+            else:
+                data = data[data[col] == value]
     
     if granularity == 'day':
         data['时间粒度'] = data['生产时间'].dt.date
@@ -84,7 +91,7 @@ def detect_anomalies(yield_series, sigma_threshold=3):
     return anomalies.tolist(), mean, std
 
 
-def get_yield_trend(line=None, product=None, granularity='day'):
+def get_yield_trend(line=None, product=None, worker=None, granularity='day', sigma_threshold=3.0):
     df = get_production_data()
     
     filters = {}
@@ -92,19 +99,22 @@ def get_yield_trend(line=None, product=None, granularity='day'):
         filters['产线'] = line
     if product:
         filters['产品型号'] = product
+    if worker:
+        filters['操作工'] = worker
     
-    trend_data = calculate_yield_by_time(df, granularity=granularity)
+    trend_data = calculate_yield_by_time(df, granularity=granularity, filter_conditions=filters if filters else None)
     
     if len(trend_data) > 0:
         anomalies, mean_val, std_val = detect_anomalies(
             trend_data['良率(%)'], 
-            sigma_threshold=3
+            sigma_threshold=sigma_threshold
         )
         trend_data['异常标记'] = anomalies
         trend_data['历史均值'] = round(mean_val, 2)
         trend_data['标准差'] = round(std_val, 2)
-        trend_data['控制上限(UCL)'] = round(mean_val + 3 * std_val, 2)
-        trend_data['控制下限(LCL)'] = round(mean_val - 3 * std_val, 2)
+        trend_data['σ倍数'] = sigma_threshold
+        trend_data['控制上限(UCL)'] = round(mean_val + sigma_threshold * std_val, 2)
+        trend_data['控制下限(LCL)'] = round(mean_val - sigma_threshold * std_val, 2)
     else:
         trend_data['异常标记'] = False
         trend_data['历史均值'] = 0

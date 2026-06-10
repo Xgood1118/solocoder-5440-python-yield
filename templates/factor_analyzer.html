@@ -204,7 +204,7 @@ function runAnalysis() {
             }
             
             const dataDiv = document.getElementById('analysis-data');
-            if (data['因子类型'] === '分类变量') {
+            if (data.factor_type === 'categorical' && data.data && data.data.length > 0) {
                 let html = '<table class="data-table"><thead><tr>';
                 const columns = Object.keys(data.data[0]);
                 columns.forEach(col => {
@@ -226,12 +226,12 @@ function runAnalysis() {
                 
                 html += '</tbody></table>';
                 dataDiv.innerHTML = html;
-            } else if (data['因子类型'] === '连续变量' && data['散点数据']) {
+            } else if (data.factor_type === 'continuous' && data.scatter_data && data.scatter_data.length > 0) {
                 let html = '<table class="data-table"><thead><tr>';
-                html += `<th>日期</th><th>${data['因子']}</th><th>良率(%)</th>`;
+                html += `<th>日期</th><th>${data.factor}</th><th>良率(%)</th>`;
                 html += '</tr></thead><tbody>';
                 
-                data['散点数据'].slice(0, 20).forEach(row => {
+                data.scatter_data.slice(0, 20).forEach(row => {
                     html += '<tr>';
                     html += `<td>${row['日期']}</td>`;
                     html += `<td>${row['因子值']}</td>`;
@@ -241,6 +241,8 @@ function runAnalysis() {
                 
                 html += '</tbody></table>';
                 dataDiv.innerHTML = html;
+            } else {
+                dataDiv.innerHTML = '<p class="placeholder">暂无数据</p>';
             }
         })
         .catch(error => {

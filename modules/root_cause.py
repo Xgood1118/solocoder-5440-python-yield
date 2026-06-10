@@ -228,39 +228,52 @@ def analyze_equipment_factor(daily_yield, factor_data, filtered_df):
     if len(eq_yield) < 2:
         return None
     
-    fault_yields = []
-    no_fault_yields = []
-    
+    eq_yield_list = []
     for _, row in eq_yield.iterrows():
         eq = row['设备']
         fault_hours = total_fault_hours.get(eq, 0)
-        if fault_hours > 2:
-            fault_yields.append(row['良率(%)'])
-        else:
-            no_fault_yields.append(row['良率(%)'])
+        eq_yield_list.append({
+            '设备': eq,
+            '良率(%)': row['良率(%)'],
+            '故障小时': fault_hours,
+        })
     
-    if len(fault_yields) == 0 or len(no_fault_yields) == 0:
+    if len(eq_yield_list) < 2:
         return None
     
-    avg_fault_yield = np.mean(fault_yields)
-    avg_no_fault_yield = np.mean(no_fault_yields)
-    diff = avg_no_fault_yield - avg_fault_yield
+    sorted_eqs = sorted(eq_yield_list, key=lambda x: x['故障小时'])
+    mid = len(sorted_eqs) // 2
+    low_fault_group = sorted_eqs[:mid]
+    high_fault_group = sorted_eqs[mid:]
+    
+    if len(low_fault_group) == 0 or len(high_fault_group) == 0:
+        return None
+    
+    no_fault_yields = [x['良率(%)'] for x in low_fault_group]
+    fault_yields = [x['良率(%)'] for x in high_fault_group]
+    
+    avg_no_fault = np.mean(no_fault_yields)
+    avg_fault = np.mean(fault_yields)
+    diff = avg_no_fault - avg_fault
     
     try:
         t_stat, p_value = stats.ttest_ind(fault_yields, no_fault_yields, equal_var=False)
     except Exception:
-        p_value = 1
+        p_value = 1.0
+    
+    worst_eq = max(eq_yield_list, key=lambda x: x['故障小时'])
+    best_eq = min(eq_yield_list, key=lambda x: x['故障小时'])
     
     return {
         '因子': '设备故障',
         '类别': '设备',
         '相关系数': round(abs(diff) / 100, 4),
-        'p值': round(p_value, 4),
-        '影响方向': '设备故障越多良率越低' if diff > 0 else '设备故障越多良率越高',
+        'p值': round(float(p_value), 4),
+        '影响方向': f'{worst_eq["设备"]} 故障最多({round(worst_eq["故障小时"],1)}h)表现最差' if diff > 0 else f'{best_eq["设备"]} 故障最少({round(best_eq["故障小时"],1)}h)表现最差',
         '影响程度': _get_correlation_level(abs(diff) / 10),
-        '描述': f'故障较多设备的平均良率为 {round(avg_fault_yield, 2)}%，故障较少设备的平均良率为 {round(avg_no_fault_yield, 2)}%，差异 {round(abs(diff), 2)}%。',
+        '描述': f'高故障组({len(fault_yields)}台)平均良率 {round(avg_fault, 2)}%，低故障组({len(no_fault_yields)}台)平均良率 {round(avg_no_fault, 2)}%，差异 {round(abs(diff), 2)}%。分组依据: 按设备累计故障时长中位数二分。',
         '详细数据': eq_yield.to_dict('records'),
-        '数据点': len(eq_yield),
+        '数据点': len(eq_yield_list),
     }
 
 
@@ -345,9 +358,11 @@ def analyze_custom_factor(factor_key, line=None, product=None):
         result = result[~result['小样本标记']]
         
         return {
-            '因子': factor_name,
-            '因子类型': '分类变量',
-            '数据': result.to_dict('records'),
+            'factor': factor_name,
+            'factor_type': 'categorical',
+            'factor_key': factor_key,
+            'category_col': col,
+            'data': result.to_dict('records'),
         }
     elif factor_key in ['temperature', 'humidity']:
         daily_yield = calculate_yield_by_time(filtered_df, granularity='day')
@@ -382,9 +397,10 @@ def analyze_custom_factor(factor_key, line=None, product=None):
                     })
         
         return {
-            '因子': factor_name,
-            '因子类型': '连续变量',
-            '散点数据': scatter_data,
+            'factor': factor_name,
+            'factor_type': 'continuous',
+            'factor_key': factor_key,
+            'scatter_data': scatter_data,
         }
     
     return None
