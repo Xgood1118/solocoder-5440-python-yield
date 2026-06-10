@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+
+{% block title %}质量工具 - 良率分析系统{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <h1 class="page-title">质量工具</h1>
+    
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('pareto')">帕累托图</button>
+        <button class="tab-btn" onclick="switchTab('fmea')">FMEA 分析</button>
+        <button class="tab-btn" onclick="switchTab('process')">工序良率链</button>
+    </div>
+    
+    <div id="tab-pareto" class="tab-content active">
+        <div class="filter-bar">
+            <div class="filter-group">
+                <label>产线:</label>
+                <select id="pareto-line">
+                    <option value="">全部</option>
+                    {% for line in lines %}
+                    <option value="{{ line }}">{{ line }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>产品:</label>
+                <select id="pareto-product">
+                    <option value="">全部</option>
+                    {% for product in products %}
+                    <option value="{{ product }}">{{ product }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="loadPareto()">分析</button>
+        </div>
+        
+        <div class="charts-row">
+            <div class="chart-card" style="flex: 2;">
+                <h3>不良原因帕累托图</h3>
+                <div class="chart-container" id="pareto-chart">
+                    <p class="placeholder">点击"分析"查看结果</p>
+                </div>
+            </div>
+            
+            <div class="chart-card" style="flex: 1;">
+                <h3>统计信息</h3>
+                <div id="pareto-stats" class="info-box">
+                    <p class="placeholder">暂无数据</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="chart-card">
+            <h3>不良项目明细表</h3>
+            <div class="table-container" id="pareto-table">
+                <p class="placeholder">暂无数据</p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="tab-fmea" class="tab-content">
+        <div class="chart-card">
+            <h3>FMEA 风险优先数 (RPN)</h3>
+            <div class="chart-container" id="fmea-chart">
+                <p class="placeholder">加载中...</p>
+            </div>
+        </div>
+        
+        <div class="charts-row">
+            <div class="chart-card">
+                <h3>高风险项 (RPN ≥ 100)</h3>
+                <div id="high-risk-list" class="info-box">
+                    <p class="placeholder">加载中...</p>
+                </div>
+            </div>
+            
+            <div class="chart-card">
+                <h3>风险分布</h3>
+                <div id="risk-distribution" class="info-box">
+                    <p class="placeholder">加载中...</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="chart-card">
+            <h3>FMEA 明细表</h3>
+            <div class="table-container" id="fmea-table">
+                <p class="placeholder">加载中...</p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="tab-process" class="tab-content">
+        <div class="filter-bar">
+            <div class="filter-group">
+                <label>产品:</label>
+                <select id="process-product" onchange="loadProcessChain()">
+                    <option value="">全部</option>
+                    {% for product in products %}
+                    <option value="{{ product }}">{{ product }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        
+        <div id="process-charts-container">
+            <p class="placeholder">选择产品查看工序良率链</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    
+    event.target.classList.add('active');
+    document.getElementById('tab-' + tabName).classList.add('active');
+    
+    if (tabName === 'fmea') {
+        loadFmea();
+    } else if (tabName === 'process') {
+        loadProcessChain();
+    }
+}
+
+function loadPareto() {
+    const line = document.getElementById('pareto-line').value;
+    const product = document.getElementById('pareto-product').value;
+    
+    let url = '/api/pareto?';
+    const params = [];
+    if (line) params.push('line=' + encodeURIComponent(line));
+    if (product) params.push('product=' + encodeURIComponent(product));
+    url += params.join('&');
+    
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            const chartDiv = document.getElementById('pareto-chart');
+            chartDiv.innerHTML = `<img src="data:image/png;base64,${data.chart}" class="chart-img" alt="帕累托图">`;
+            
+            const statsDiv = document.getElementById('pareto-stats');
+            statsDiv.innerHTML = `
+                <div class="info-item">
+                    <span class="info-label">总不良数:</span>
+                    <span class="info-value">${data['总不良数']}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">TOP5占比:</span>
+                    <span class="info-value highlight">${data['TOP5占比']}%</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">二八法则:</span>
+                    <span class="info-value">${data['二八法则验证']}</span>
+                </div>
+            `;
+            
+            const tableDiv = document.getElementById('pareto-table');
+            let html = '<table class="data-table"><thead><tr>';
+            html += '<th>排名</th><th>不良项目</th><th>不良数</th><th>占比(%)</th><th>累计占比(%)</th>';
+            html += '</tr></thead><tbody>';
+            
+            data['不良项目数据'].forEach((item, index) => {
+                html += '<tr>';
+                html += `<td>${index + 1}</td>`;
+                html += `<td>${item['不良项目分类']}</td>`;
+                html += `<td>${item['不良数']}</td>`;
+                html += `<td>${item['占比(%)']}</td>`;
+                html += `<td>${item['累计占比(%)']}</td>`;
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table>';
+            tableDiv.innerHTML = html;
+        });
+}
+
+function loadFmea() {
+    fetch('/api/fmea')
+        .then(r => r.json())
+        .then(data => {
+            const chartDiv = document.getElementById('fmea-chart');
+            chartDiv.innerHTML = `<img src="data:image/png;base64,${data.chart}" class="chart-img" alt="FMEA图">`;
+            
+            const highRiskDiv = document.getElementById('high-risk-list');
+            let highRiskHtml = '';
+            if (data['高风险项'].length > 0) {
+                data['高风险项'].slice(0, 5).forEach(item => {
+                    highRiskHtml += `
+                        <div class="risk-item risk-high">
+                            <span class="risk-name">${item['失效模式']}</span>
+                            <span class="risk-rpn">RPN: ${item['RPN']}</span>
+                        </div>
+                    `;
+                });
+            } else {
+                highRiskHtml = '<p class="placeholder">暂无高风险项</p>';
+            }
+            highRiskDiv.innerHTML = highRiskHtml;
+            
+            const distDiv = document.getElementById('risk-distribution');
+            distDiv.innerHTML = `
+                <div class="info-item">
+                    <span class="info-label">高风险:</span>
+                    <span class="info-value risk-high">${data['高风险项'].length} 项</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">中风险:</span>
+                    <span class="info-value risk-medium">${data['中风险项'].length} 项</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">低风险:</span>
+                    <span class="info-value risk-low">${data['低风险项'].length} 项</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">总计:</span>
+                    <span class="info-value">${data['全部FMEA数据'].length} 项</span>
+                </div>
+            `;
+            
+            const tableDiv = document.getElementById('fmea-table');
+            let html = '<table class="data-table"><thead><tr>';
+            html += '<th>排名</th><th>失效模式</th><th>工序</th><th>S</th><th>O</th><th>D</th><th>RPN</th>';
+            html += '</tr></thead><tbody>';
+            
+            data['全部FMEA数据'].forEach((item, index) => {
+                const riskClass = item['RPN'] >= 100 ? 'risk-high' : (item['RPN'] >= 50 ? 'risk-medium' : 'risk-low');
+                html += `<tr class="${riskClass}">`;
+                html += `<td>${index + 1}</td>`;
+                html += `<td>${item['失效模式']}</td>`;
+                html += `<td>${item['工序']}</td>`;
+                html += `<td>${item['严重度S']}</td>`;
+                html += `<td>${item['发生率O']}</td>`;
+                html += `<td>${item['探测度D']}</td>`;
+                html += `<td><strong>${item['RPN']}</strong></td>`;
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table>';
+            tableDiv.innerHTML = html;
+        });
+}
+
+function loadProcessChain() {
+    const product = document.getElementById('process-product').value;
+    
+    let url = '/api/process-chain';
+    if (product) {
+        url += '?product=' + encodeURIComponent(product);
+    }
+    
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('process-charts-container');
+            
+            let html = '';
+            for (const [prodName, prodData] of Object.entries(data.data)) {
+                const chart = data.charts[prodName];
+                html += `
+                    <div class="chart-card">
+                        <h3>${prodName} 工序良率链</h3>
+                        <div class="chart-container">
+                            <img src="data:image/png;base64,${chart}" class="chart-img" alt="${prodName}工序链">
+                        </div>
+                        <div class="process-summary">
+                            <span class="summary-item">
+                                <span class="summary-label">最终良率:</span>
+                                <span class="summary-value">${prodData['最终良率(%)']}%</span>
+                            </span>
+                            <span class="summary-item">
+                                <span class="summary-label">瓶颈工序:</span>
+                                <span class="summary-value highlight">${prodData['瓶颈工序']}</span>
+                            </span>
+                            <span class="summary-item">
+                                <span class="summary-label">瓶颈良率:</span>
+                                <span class="summary-value">${prodData['瓶颈工序良率(%)']}%</span>
+                            </span>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = html;
+        });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadPareto();
+});
+</script>
+{% endblock %}

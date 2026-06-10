@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}首页 - 良率分析系统{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <h1 class="page-title">质量总览</h1>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon stat-icon-green">📈</div>
+            <div class="stat-info">
+                <div class="stat-value">{{ summary['总体良率']['良率(%)'] }}%</div>
+                <div class="stat-label">总体良率</div>
+            </div>
+            {% if summary['总体良率']['小样本标记'] %}
+            <div class="stat-warning">⚠️ 小样本</div>
+            {% endif %}
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon stat-icon-blue">📦</div>
+            <div class="stat-info">
+                <div class="stat-value">{{ '{:,}'.format(summary['总生产数量']) }}</div>
+                <div class="stat-label">总生产数量</div>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon stat-icon-orange">✅</div>
+            <div class="stat-info">
+                <div class="stat-value">{{ '{:,}'.format(summary['总合格数量']) }}</div>
+                <div class="stat-label">合格数量</div>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon stat-icon-purple">📋</div>
+            <div class="stat-info">
+                <div class="stat-value">{{ summary['总工单数'] }}</div>
+                <div class="stat-label">总工单数</div>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon stat-icon-red">❌</div>
+            <div class="stat-info">
+                <div class="stat-value">{{ quality_overview['总不良数'] }}</div>
+                <div class="stat-label">总不良数</div>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon stat-icon-teal">⚠️</div>
+            <div class="stat-info">
+                <div class="stat-value">{{ quality_overview['FMEA高风险项数'] }}</div>
+                <div class="stat-label">FMEA高风险项</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="charts-row">
+        <div class="chart-card">
+            <h3>各产线良率</h3>
+            <div id="line-yield-chart">
+                <canvas id="lineChart"></canvas>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>产线</th>
+                        <th>总数量</th>
+                        <th>良率</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in summary['按产线'] %}
+                    <tr>
+                        <td>{{ item['产线'] }}</td>
+                        <td>{{ item['总数量'] }}</td>
+                        <td class="{% if item['小样本标记'] %}text-warning{% endif %}">
+                            {{ item['良率(%)'] }}%
+                            {% if item['小样本标记'] %}<span class="warning-badge">小样本</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="chart-card">
+            <h3>各产品良率</h3>
+            <div id="product-yield-chart">
+                <canvas id="productChart"></canvas>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>产品型号</th>
+                        <th>总数量</th>
+                        <th>良率</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in summary['按产品'] %}
+                    <tr>
+                        <td>{{ item['产品型号'] }}</td>
+                        <td>{{ item['总数量'] }}</td>
+                        <td class="{% if item['小样本标记'] %}text-warning{% endif %}">
+                            {{ item['良率(%)'] }}%
+                            {% if item['小样本标记'] %}<span class="warning-badge">小样本</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="charts-row">
+        <div class="chart-card">
+            <h3>TOP5 不良原因</h3>
+            <div id="defect-chart"></div>
+        </div>
+        
+        <div class="chart-card">
+            <h3>TOP5 高风险 FMEA</h3>
+            <div id="fmea-chart"></div>
+        </div>
+    </div>
+    
+    <div class="quick-actions">
+        <h3>快捷入口</h3>
+        <div class="action-buttons">
+            <a href="/yield" class="action-btn">
+                <span class="action-icon">📊</span>
+                <span>良率分析</span>
+            </a>
+            <a href="/root-cause" class="action-btn">
+                <span class="action-icon">🔍</span>
+                <span>根因分析</span>
+            </a>
+            <a href="/quality-tools" class="action-btn">
+                <span class="action-icon">🛠️</span>
+                <span>质量工具</span>
+            </a>
+            <a href="/reports" class="action-btn">
+                <span class="action-icon">📑</span>
+                <span>报告中心</span>
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadLineYieldChart();
+    loadProductYieldChart();
+    loadDefectChart();
+    loadFmeaChart();
+});
+
+function loadLineYieldChart() {
+    fetch('/api/yield/by-dimension?dimension=产线')
+        .then(r => r.json())
+        .then(data => {
+            const chartDiv = document.getElementById('line-yield-chart');
+            chartDiv.innerHTML = `<img src="data:image/png;base64,${data.chart}" class="chart-img" alt="产线良率图">`;
+        });
+}
+
+function loadProductYieldChart() {
+    fetch('/api/yield/by-dimension?dimension=产品型号')
+        .then(r => r.json())
+        .then(data => {
+            const chartDiv = document.getElementById('product-yield-chart');
+            chartDiv.innerHTML = `<img src="data:image/png;base64,${data.chart}" class="chart-img" alt="产品良率图">`;
+        });
+}
+
+function loadDefectChart() {
+    fetch('/api/pareto')
+        .then(r => r.json())
+        .then(data => {
+            const chartDiv = document.getElementById('defect-chart');
+            chartDiv.innerHTML = `<img src="data:image/png;base64,${data.chart}" class="chart-img" alt="不良原因图">`;
+        });
+}
+
+function loadFmeaChart() {
+    fetch('/api/fmea')
+        .then(r => r.json())
+        .then(data => {
+            const chartDiv = document.getElementById('fmea-chart');
+            chartDiv.innerHTML = `<img src="data:image/png;base64,${data.chart}" class="chart-img" alt="FMEA图">`;
+        });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}良率分析系统{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <span class="logo-icon">📊</span>
+                <span class="logo-text">良率分析系统</span>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/" class="{% if request.path == '/' %}active{% endif %}">首页</a></li>
+                <li><a href="/yield" class="{% if '/yield' in request.path %}active{% endif %}">良率分析</a></li>
+                <li><a href="/root-cause" class="{% if '/root-cause' in request.path %}active{% endif %}">根因分析</a></li>
+                <li><a href="/quality-tools" class="{% if '/quality-tools' in request.path %}active{% endif %}">质量工具</a></li>
+                <li><a href="/reports" class="{% if '/reports' in request.path %}active{% endif %}">报告中心</a></li>
+            </ul>
+            <div class="nav-user">
+                <span class="user-icon">👤</span>
+                <span>质量部</span>
+            </div>
+        </div>
+    </nav>
+    
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+    
+    <footer class="footer">
+        <p>© 2024 良率分析系统 - 质量部专用</p>
+    </footer>
+    
+    <script src="/static/js/main.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

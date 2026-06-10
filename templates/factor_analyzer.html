@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}因子分析器 - 良率分析系统{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="hidden-feature-banner">
+        <span class="banner-icon">🔧</span>
+        <span>隐藏功能 - 自定义因子分析器（质量部专用）</span>
+        <span class="banner-icon">🔧</span>
+    </div>
+    
+    <h1 class="page-title">自定义因子分析器</h1>
+    
+    <div class="factor-analyzer-layout">
+        <div class="factor-panel">
+            <h3>可用因子</h3>
+            <p class="panel-desc">拖拽或点击选择要分析的因子</p>
+            
+            <div class="factor-groups">
+                {% set ns = namespace(current_category='') %}
+                {% for factor in factors %}
+                    {% if factor.category != ns.current_category %}
+                        {% if ns.current_category != '' %}
+                            </div>
+                        {% endif %}
+                        <div class="factor-group">
+                            <h4>{{ factor.category }}</h4>
+                        {% set ns.current_category = factor.category %}
+                    {% endif %}
+                    <div class="factor-item-draggable" 
+                         draggable="true" 
+                         data-factor="{{ factor.key }}"
+                         data-name="{{ factor.name }}"
+                         data-category="{{ factor.category }}"
+                         ondragstart="dragStart(event)"
+                         onclick="addFactor('{{ factor.key }}', '{{ factor.name }}', '{{ factor.category }}')">
+                        <span class="factor-drag-icon">⋮⋮</span>
+                        <span class="factor-name">{{ factor.name }}</span>
+                        <span class="factor-unit">{{ factor.unit }}</span>
+                    </div>
+                {% endfor %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="analysis-panel">
+            <h3>分析配置</h3>
+            
+            <div class="filter-bar">
+                <div class="filter-group">
+                    <label>产线:</label>
+                    <select id="analyzer-line" onchange="runAnalysis()">
+                        <option value="">全部</option>
+                        {% for line in lines %}
+                        <option value="{{ line }}">{{ line }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>产品:</label>
+                    <select id="analyzer-product" onchange="runAnalysis()">
+                        <option value="">全部</option>
+                        {% for product in products %}
+                        <option value="{{ product }}">{{ product }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <div class="drop-zone" 
+                 ondragover="dragOver(event)" 
+                 ondragleave="dragLeave(event)"
+                 ondrop="drop(event)"
+                 id="drop-zone">
+                <p class="drop-placeholder">将因子拖拽到此处进行分析</p>
+                <div class="selected-factors" id="selected-factors"></div>
+            </div>
+            
+            <div class="analyzer-actions">
+                <button class="btn btn-primary" onclick="runAnalysis()">开始分析</button>
+                <button class="btn btn-secondary" onclick="clearFactors()">清空因子</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="chart-card" id="analysis-result-card" style="display: none;">
+        <h3>分析结果</h3>
+        <div class="chart-container" id="analysis-chart">
+            <p class="placeholder">请选择因子后开始分析</p>
+        </div>
+        <div class="table-container" id="analysis-data">
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedFactors = [];
+
+function dragStart(e) {
+    e.dataTransfer.setData('factorKey', e.target.dataset.factor);
+    e.dataTransfer.setData('factorName', e.target.dataset.name);
+    e.dataTransfer.setData('factorCategory', e.target.dataset.category);
+}
+
+function dragOver(e) {
+    e.preventDefault();
+    document.getElementById('drop-zone').classList.add('drag-over');
+}
+
+function dragLeave(e) {
+    e.preventDefault();
+    document.getElementById('drop-zone').classList.remove('drag-over');
+}
+
+function drop(e) {
+    e.preventDefault();
+    document.getElementById('drop-zone').classList.remove('drag-over');
+    
+    const factorKey = e.dataTransfer.getData('factorKey');
+    const factorName = e.dataTransfer.getData('factorName');
+    const factorCategory = e.dataTransfer.getData('factorCategory');
+    
+    addFactor(factorKey, factorName, factorCategory);
+}
+
+function addFactor(key, name, category) {
+    if (selectedFactors.find(f => f.key === key)) {
+        return;
+    }
+    
+    selectedFactors.push({ key, name, category });
+    renderSelectedFactors();
+    runAnalysis();
+}
+
+function removeFactor(key) {
+    selectedFactors = selectedFactors.filter(f => f.key !== key);
+    renderSelectedFactors();
+    
+    if (selectedFactors.length > 0) {
+        runAnalysis();
+    } else {
+        document.getElementById('analysis-result-card').style.display = 'none';
+    }
+}
+
+function renderSelectedFactors() {
+    const container = document.getElementById('selected-factors');
+    const placeholder = container.parentElement.querySelector('.drop-placeholder');
+    
+    if (selectedFactors.length === 0) {
+        placeholder.style.display = 'block';
+        container.innerHTML = '';
+        return;
+    }
+    
+    placeholder.style.display = 'none';
+    let html = '';
+    
+    selectedFactors.forEach(factor => {
+        html += `
+            <div class="selected-factor-tag">
+                <span class="tag-category">[${factor.category}]</span>
+                <span class="tag-name">${factor.name}</span>
+                <span class="tag-close" onclick="removeFactor('${factor.key}')">×</span>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+function clearFactors() {
+    selectedFactors = [];
+    renderSelectedFactors();
+    document.getElementById('analysis-result-card').style.display = 'none';
+}
+
+function runAnalysis() {
+    if (selectedFactors.length === 0) {
+        return;
+    }
+    
+    const line = document.getElementById('analyzer-line').value;
+    const product = document.getElementById('analyzer-product').value;
+    
+    const primaryFactor = selectedFactors[0];
+    
+    let url = '/api/custom-factor?factor=' + encodeURIComponent(primaryFactor.key);
+    if (line) url += '&line=' + encodeURIComponent(line);
+    if (product) url += '&product=' + encodeURIComponent(product);
+    
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('analysis-result-card').style.display = 'block';
+            
+            const chartDiv = document.getElementById('analysis-chart');
+            if (data.chart) {
+                chartDiv.innerHTML = `<img src="data:image/png;base64,${data.chart}" class="chart-img" alt="因子分析图">`;
+            }
+            
+            const dataDiv = document.getElementById('analysis-data');
+            if (data['因子类型'] === '分类变量') {
+                let html = '<table class="data-table"><thead><tr>';
+                const columns = Object.keys(data.data[0]);
+                columns.forEach(col => {
+                    html += `<th>${col}</th>`;
+                });
+                html += '</tr></thead><tbody>';
+                
+                data.data.forEach(row => {
+                    html += '<tr>';
+                    columns.forEach(col => {
+                        let val = row[col];
+                        if (typeof val === 'boolean') {
+                            val = val ? '是' : '否';
+                        }
+                        html += `<td>${val}</td>`;
+                    });
+                    html += '</tr>';
+                });
+                
+                html += '</tbody></table>';
+                dataDiv.innerHTML = html;
+            } else if (data['因子类型'] === '连续变量' && data['散点数据']) {
+                let html = '<table class="data-table"><thead><tr>';
+                html += `<th>日期</th><th>${data['因子']}</th><th>良率(%)</th>`;
+                html += '</tr></thead><tbody>';
+                
+                data['散点数据'].slice(0, 20).forEach(row => {
+                    html += '<tr>';
+                    html += `<td>${row['日期']}</td>`;
+                    html += `<td>${row['因子值']}</td>`;
+                    html += `<td>${row['良率(%)']}</td>`;
+                    html += '</tr>';
+                });
+                
+                html += '</tbody></table>';
+                dataDiv.innerHTML = html;
+            }
+        })
+        .catch(error => {
+            console.error('分析失败:', error);
+        });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    addFactor('temperature', '温度', '环境');
+});
+</script>
+{% endblock %}

@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+
+{% block title %}良率分析 - 良率分析系统{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <h1 class="page-title">良率分析</h1>
+    
+    <div class="filter-bar">
+        <div class="filter-group">
+            <label>产线:</label>
+            <select id="filter-line">
+                <option value="">全部</option>
+                {% for line in lines %}
+                <option value="{{ line }}">{{ line }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>产品:</label>
+            <select id="filter-product">
+                <option value="">全部</option>
+                {% for product in products %}
+                <option value="{{ product }}">{{ product }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>时间粒度:</label>
+            <select id="filter-granularity">
+                <option value="day">日</option>
+                <option value="week">周</option>
+                <option value="month">月</option>
+            </select>
+        </div>
+        <button class="btn btn-primary" onclick="loadTrend()">查询</button>
+    </div>
+    
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('trend')">趋势分析</button>
+        <button class="tab-btn" onclick="switchTab('compare')">维度对比</button>
+        <button class="tab-btn" onclick="switchTab('combination')">组合维度</button>
+        <button class="tab-btn" onclick="switchTab('worker')">工人分析</button>
+    </div>
+    
+    <div id="tab-trend" class="tab-content active">
+        <div class="chart-card">
+            <h3>良率趋势图</h3>
+            <div class="chart-container" id="trend-chart">
+                <p class="placeholder">请选择筛选条件后点击查询</p>
+            </div>
+            <div class="chart-legend">
+                <span class="legend-item"><span class="legend-dot legend-blue"></span> 良率</span>
+                <span class="legend-item"><span class="legend-dot legend-red"></span> 控制限 (±3σ)</span>
+                <span class="legend-item"><span class="legend-dot legend-green"></span> 均值</span>
+            </div>
+        </div>
+        
+        <div class="chart-card">
+            <h3>异常点列表</h3>
+            <div class="table-container" id="anomaly-table">
+                <p class="placeholder">暂无数据</p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="tab-compare" class="tab-content">
+        <div class="charts-row">
+            <div class="chart-card">
+                <h3>产线对比</h3>
+                <div class="chart-container" id="line-compare-chart">
+                    <p class="placeholder">点击加载数据</p>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="loadLineCompare()">加载</button>
+            </div>
+            
+            <div class="chart-card">
+                <h3>班次对比</h3>
+                <div class="chart-container" id="shift-compare-chart">
+                    <p class="placeholder">点击加载数据</p>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="loadShiftCompare()">加载</button>
+            </div>
+        </div>
+        
+        <div class="chart-card">
+            <h3>操作工对比</h3>
+            <div class="chart-container" id="worker-compare-chart">
+                <p class="placeholder">点击加载数据</p>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="loadWorkerCompare()">加载</button>
+        </div>
+    </div>
+    
+    <div id="tab-combination" class="tab-content">
+        <div class="filter-bar">
+            <div class="filter-group">
+                <label>维度组合:</label>
+                <div class="checkbox-group">
+                    <label><input type="checkbox" value="产线" checked onchange="loadCombination()"> 产线</label>
+                    <label><input type="checkbox" value="产品型号" checked onchange="loadCombination()"> 产品</label>
+                    <label><input type="checkbox" value="班次" onchange="loadCombination()"> 班次</label>
+                    <label><input type="checkbox" value="操作工" onchange="loadCombination()"> 操作工</label>
+                </div>
+            </div>
+        </div>
+        
+        <div class="chart-card">
+            <h3>组合维度良率表</h3>
+            <div class="table-container" id="combination-table">
+                <p class="placeholder">请选择维度组合</p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="tab-worker" class="tab-content">
+        <div class="filter-bar">
+            <div class="filter-group">
+                <label>操作工:</label>
+                <select id="filter-worker" onchange="loadWorkerTrend()">
+                    {% for worker in workers %}
+                    <option value="{{ worker }}">{{ worker }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        
+        <div class="chart-card">
+            <h3>操作工良率趋势</h3>
+            <div class="chart-container" id="worker-trend-chart">
+                <p class="placeholder">请选择操作工</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    
+    event.target.classList.add('active');
+    document.getElementById('tab-' + tabName).classList.add('active');
+}
+
+function loadTrend() {
+    const line = document.getElementById('filter-line').value;
+    const product = document.getElementById('filter-product').value;
+    const granularity = document.getElementById('filter-granularity').value;
+    
+    let url = '/api/yield/trend?granularity=' + granularity;
+    if (line) url += '&line=' + encodeURIComponent(line);
+    if (product) url += '&product=' + encodeURIComponent(product);
+    
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            const chartDiv = document.getElementById('trend-chart');
+            chartDiv.innerHTML = `<img src="data:image/png;base64,${data.chart}" class="chart-img" alt="良率趋势图">`;
+            
+            const anomalies = data.data.filter(d => d.异常标记);
+            const anomalyTable = document.getElementById('anomaly-table');
+            if (anomalies.length > 0) {
+                let html = '<table class="data-table"><thead><tr>';
+                html += '<th>时间</th><th>良率(%)</th><th>均值</th><th>标准差</th><th>状态</th>';
+                html += '</tr></thead><tbody>';
+                
+                anomalies.forEach(a => {
+                    html += `<tr>`;
+                    html += `<td>${a['时间粒度']}</td>`;
+                    html += `<td>${a['良率(%)']}</td>`;
+                    html += `<td>${a['历史均值']}</td>`;
+                    html += `<td>${a['标准差']}</td>`;
+                    html += `<td><span class="badge badge-danger">异常</span></td>`;
+                    html += `</tr>`;
+                });
+                
+                html += '</tbody></table>';
+                anomalyTable.innerHTML = html;
+            } else {
+                anomalyTable.innerHTML = '<p class="placeholder">无异常数据</p>';
+            }
+        });
+}
+
+function loadLineCompare() {
+    const product = document.getElementById('filter-product').value;
+    let url = '/api/yield/compare-lines';
+    if (product) url += '?product=' + encodeURIComponent(product);
+    
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            const chartDiv = document.getElementById('line-compare-chart');
+            chartDiv.innerHTML = `<img src="data:image/png;base64,${data.chart}" class="chart-img" alt="产线对比图">`;
+        });
+}
+
+function loadShiftCompare() {
+    const line = document.getElementById('filter-line').value;
+    const product = document.getElementById('filter-product').value;
+    
+    let url = '/api/yield/compare-shifts';
+    const params = [];
+    if (line) params.push('line=' + encodeURIComponent(line));
+    if (product) params.push('product=' + encodeURIComponent(product));
+    if (params.length > 0) url += '?' + params.join('&');
+    
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            const chartDiv = document.getElementById('shift-compare-chart');
+            chartDiv.innerHTML = `<img src="data:image/png;base64,${data.chart}" class="chart-img" alt="班次对比图">`;
+        });
+}
+
+function loadWorkerCompare() {
+    const line = document.getElementById('filter-line').value;
+    const product = document.getElementById('filter-product').value;
+    
+    let url = '/api/yield/compare-workers';
+    const params = [];
+    if (line) params.push('line=' + encodeURIComponent(line));
+    if (product) params.push('product=' + encodeURIComponent(product));
+    if (params.length > 0) url += '?' + params.join('&');
+    
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            const chartDiv = document.getElementById('worker-compare-chart');
+            chartDiv.innerHTML = `<img src="data:image/png;base64,${data.chart}" class="chart-img" alt="操作工对比图">`;
+        });
+}
+
+function loadCombination() {
+    const checkboxes = document.querySelectorAll('#tab-combination input[type="checkbox"]:checked');
+    const dimensions = Array.from(checkboxes).map(cb => cb.value);
+    
+    if (dimensions.length === 0) {
+        document.getElementById('combination-table').innerHTML = '<p class="placeholder">请至少选择一个维度</p>';
+        return;
+    }
+    
+    let url = '/api/yield/by-combination?';
+    url += dimensions.map(d => 'dimensions=' + encodeURIComponent(d)).join('&');
+    
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            const tableDiv = document.getElementById('combination-table');
+            
+            if (data.data.length === 0) {
+                tableDiv.innerHTML = '<p class="placeholder">暂无数据</p>';
+                return;
+            }
+            
+            const columns = Object.keys(data.data[0]);
+            let html = '<table class="data-table"><thead><tr>';
+            columns.forEach(col => {
+                html += `<th>${col}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+            
+            data.data.forEach(row => {
+                html += '<tr>';
+                columns.forEach(col => {
+                    let val = row[col];
+                    if (typeof val === 'boolean') {
+                        val = val ? '是' : '否';
+                    }
+                    html += `<td>${val}</td>`;
+                });
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table>';
+            tableDiv.innerHTML = html;
+        });
+}
+
+function loadWorkerTrend() {
+    const worker = document.getElementById('filter-worker').value;
+    const granularity = document.getElementById('filter-granularity').value;
+    
+    fetch(`/api/yield/trend?granularity=${granularity}&worker=${encodeURIComponent(worker)}`)
+        .then(r => r.json())
+        .then(data => {
+            const chartDiv = document.getElementById('worker-trend-chart');
+            if (data.data && data.data.length > 0) {
+                chartDiv.innerHTML = `<img src="data:image/png;base64,${data.chart}" class="chart-img" alt="工人趋势图">`;
+            } else {
+                chartDiv.innerHTML = '<p class="placeholder">暂无数据</p>';
+            }
+        })
+        .catch(() => {
+            loadTrendWorkerFallback();
+        });
+}
+
+function loadTrendWorkerFallback() {
+    const worker = document.getElementById('filter-worker').value;
+    fetch(`/api/yield/by-combination?dimensions=操作工`)
+        .then(r => r.json())
+        .then(data => {
+            const workerData = data.data.find(d => d['操作工'] === worker);
+            const chartDiv = document.getElementById('worker-trend-chart');
+            if (workerData) {
+                chartDiv.innerHTML = `
+                    <div class="stat-card" style="margin: 20px auto; max-width: 300px;">
+                        <div class="stat-info" style="text-align: center;">
+                            <div class="stat-value">${workerData['良率(%)']}%</div>
+                            <div class="stat-label">${worker} 综合良率</div>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadTrend();
+    loadCombination();
+});
+</script>
+{% endblock %}

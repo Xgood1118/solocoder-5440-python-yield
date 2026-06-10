@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}根因分析 - 良率分析系统{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <h1 class="page-title">根因分析</h1>
+    
+    <div class="filter-bar">
+        <div class="filter-group">
+            <label>产线:</label>
+            <select id="filter-line">
+                <option value="">全部</option>
+                {% for line in lines %}
+                <option value="{{ line }}">{{ line }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>产品:</label>
+            <select id="filter-product">
+                <option value="">全部</option>
+                {% for product in products %}
+                <option value="{{ product }}">{{ product }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button class="btn btn-primary" onclick="loadRootCauseAnalysis()">开始分析</button>
+    </div>
+    
+    <div class="charts-row">
+        <div class="chart-card" style="flex: 2;">
+            <h3>因子相关性排序</h3>
+            <div class="chart-container" id="correlation-chart">
+                <p class="placeholder">点击"开始分析"查看结果</p>
+            </div>
+        </div>
+        
+        <div class="chart-card" style="flex: 1;">
+            <h3>分析周期</h3>
+            <div id="period-info" class="info-box">
+                <p class="placeholder">暂无数据</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="chart-card">
+        <h3>详细因子分析</h3>
+        <div id="factor-details">
+            <p class="placeholder">点击"开始分析"查看详细的根因分析结果</p>
+        </div>
+    </div>
+    
+    <div class="chart-card">
+        <h3>良率趋势</h3>
+        <div class="chart-container" id="yield-trend-chart">
+            <p class="placeholder">点击"开始分析"查看趋势</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function loadRootCauseAnalysis() {
+    const line = document.getElementById('filter-line').value;
+    const product = document.getElementById('filter-product').value;
+    
+    let url = '/api/root-cause?';
+    const params = [];
+    if (line) params.push('line=' + encodeURIComponent(line));
+    if (product) params.push('product=' + encodeURIComponent(product));
+    url += params.join('&');
+    
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            const corrChart = document.getElementById('correlation-chart');
+            corrChart.innerHTML = `<img src="data:image/png;base64,${data.correlation_chart}" class="chart-img" alt="因子相关性图">`;
+            
+            const periodInfo = document.getElementById('period-info');
+            periodInfo.innerHTML = `
+                <div class="info-item">
+                    <span class="info-label">开始日期:</span>
+                    <span class="info-value">${data.period['开始日期'] || 'N/A'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">结束日期:</span>
+                    <span class="info-value">${data.period['结束日期'] || 'N/A'}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">分析因子数:</span>
+                    <span class="info-value">${data.factors.length} 个</span>
+                </div>
+            `;
+            
+            const factorDetails = document.getElementById('factor-details');
+            let html = '<div class="factor-list">';
+            
+            data.factors.forEach((factor, index) => {
+                const levelClass = factor['影响程度'] === '强' ? 'level-high' : 
+                                   factor['影响程度'] === '中等' ? 'level-medium' : 
+                                   factor['影响程度'] === '弱' ? 'level-low' : 'level-very-low';
+                
+                html += `
+                    <div class="factor-item ${levelClass}">
+                        <div class="factor-header">
+                            <span class="factor-rank">${index + 1}</span>
+                            <span class="factor-name">${factor['因子']}</span>
+                            <span class="factor-category">${factor['类别']}</span>
+                            <span class="factor-corr">相关系数: ${factor['相关系数']}</span>
+                        </div>
+                        <div class="factor-body">
+                            <p><strong>影响程度:</strong> ${factor['影响程度']}</p>
+                            <p><strong>影响方向:</strong> ${factor['影响方向']}</p>
+                            <p><strong>分析说明:</strong> ${factor['描述']}</p>
+                            <p><strong>数据点数量:</strong> ${factor['数据点']}</p>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            factorDetails.innerHTML = html;
+            
+            if (data.trend && data.trend.length > 0) {
+                const trendChart = document.getElementById('yield-trend-chart');
+                fetch('/api/yield/trend' + (params.length > 0 ? '?' + params.join('&') : ''))
+                    .then(r => r.json())
+                    .then(trendData => {
+                        trendChart.innerHTML = `<img src="data:image/png;base64,${trendData.chart}" class="chart-img" alt="良率趋势图">`;
+                    });
+            }
+        });
+}
+</script>
+{% endblock %}

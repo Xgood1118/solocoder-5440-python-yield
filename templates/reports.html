@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}报告中心 - 良率分析系统{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <h1 class="page-title">报告中心</h1>
+    
+    <div class="report-cards">
+        <div class="report-card">
+            <div class="report-icon">📊</div>
+            <h3>周度质量报告</h3>
+            <p>包含本周良率趋势、维度对比、根因分析、FMEA及改进建议</p>
+            <div class="report-stats">
+                <div class="report-stat">
+                    <span class="stat-label">总体良率</span>
+                    <span class="stat-value">{{ weekly_summary['总体良率'] }}%</span>
+                </div>
+                <div class="report-stat">
+                    <span class="stat-label">改进建议</span>
+                    <span class="stat-value">{{ weekly_summary['改进建议数'] }} 条</span>
+                </div>
+            </div>
+            <button class="btn btn-primary btn-block" onclick="generateReport('weekly')">
+                生成周度报告
+            </button>
+        </div>
+        
+        <div class="report-card">
+            <div class="report-icon">📈</div>
+            <h3>月度质量报告</h3>
+            <p>包含月度良率汇总、趋势分析、根因深度分析及改进方案</p>
+            <div class="report-stats">
+                <div class="report-stat">
+                    <span class="stat-label">总体良率</span>
+                    <span class="stat-value">{{ monthly_summary['总体良率'] }}%</span>
+                </div>
+                <div class="report-stat">
+                    <span class="stat-label">最高RPN</span>
+                    <span class="stat-value">{{ monthly_summary['最高RPN'] }}</span>
+                </div>
+            </div>
+            <button class="btn btn-primary btn-block" onclick="generateReport('monthly')">
+                生成月度报告
+            </button>
+        </div>
+    </div>
+    
+    <div class="chart-card">
+        <h3>报告内容预览</h3>
+        <div class="report-outline">
+            <div class="outline-section">
+                <h4>📋 报告包含的章节</h4>
+                <ul>
+                    <li>总体概览 - 核心指标汇总</li>
+                    <li>良率趋势分析 - 时间序列分析 + 控制图</li>
+                    <li>维度对比分析 - 产线/班次/产品对比</li>
+                    <li>根因分析 - 多因子相关性分析</li>
+                    <li>帕累托分析 - 不良原因排序</li>
+                    <li>FMEA失效模式分析 - 风险优先数</li>
+                    <li>工序良率链 - 瓶颈工序识别</li>
+                    <li>改进建议 - 基于RPN的自动建议</li>
+                    <li>数据质量说明 - 小样本数据标记</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <div class="chart-card">
+        <h3>定制报告参数</h3>
+        <div class="filter-bar">
+            <div class="filter-group">
+                <label>产线:</label>
+                <select id="report-line">
+                    <option value="">全部</option>
+                    <option value="A线">A线</option>
+                    <option value="B线">B线</option>
+                    <option value="C线">C线</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>产品:</label>
+                <select id="report-product">
+                    <option value="">全部</option>
+                    <option value="产品A">产品A</option>
+                    <option value="产品B">产品B</option>
+                    <option value="产品C">产品C</option>
+                </select>
+            </div>
+            <button class="btn btn-secondary" onclick="generateCustomReport()">
+                生成定制报告
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function generateReport(type) {
+    const line = document.getElementById('report-line').value;
+    const product = document.getElementById('report-product').value;
+    
+    generateAndDownload(type, line, product);
+}
+
+function generateCustomReport() {
+    const line = document.getElementById('report-line').value;
+    const product = document.getElementById('report-product').value;
+    
+    generateAndDownload('weekly', line, product);
+}
+
+function generateAndDownload(type, line, product) {
+    const btn = event.target;
+    const originalText = btn.textContent;
+    btn.textContent = '生成中...';
+    btn.disabled = true;
+    
+    fetch('/api/report/generate', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            type: type,
+            line: line || null,
+            product: product || null,
+        }),
+    })
+    .then(response => {
+        if (response.ok) {
+            return response.blob();
+        }
+        throw new Error('生成失败');
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `良率分析报告_${type}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        btn.textContent = '✓ 生成成功';
+        setTimeout(() => {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }, 2000);
+    })
+    .catch(error => {
+        alert('报告生成失败: ' + error.message);
+        btn.textContent = originalText;
+        btn.disabled = false;
+    });
+}
+</script>
+{% endblock %}
